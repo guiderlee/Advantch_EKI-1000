@@ -1,0 +1,13 @@
+Index: b/drivers/net/wireless/marvell/mwifiex/cfg80211.c
+===================================================================
+--- a/drivers/net/wireless/marvell/mwifiex/cfg80211.c	2023-03-24 16:08:57.376084829 +0800
++++ b/drivers/net/wireless/marvell/mwifiex/cfg80211.c	2023-03-24 16:18:10.934344836 +0800
+@@ -1395,7 +1395,7 @@ mwifiex_dump_station_info(struct mwifiex
+ 		mwifiex_parse_htinfo(priv, node->stats.last_tx_rate,
+ 				     node->stats.last_tx_htinfo,
+ 				     &sinfo->txrate);
+-		sinfo->txrate.legacy = node->stats.last_tx_rate * 5;
++		//sinfo->txrate.legacy = node->stats.last_tx_rate * 5;
+ 
+ 		return 0;
+ 	}

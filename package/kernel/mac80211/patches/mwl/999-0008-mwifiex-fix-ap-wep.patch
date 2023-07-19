@@ -1,0 +1,35 @@
+Index: b/drivers/net/wireless/marvell/mwifiex/uap_cmd.c
+===================================================================
+--- a/drivers/net/wireless/marvell/mwifiex/uap_cmd.c	2023-05-12 10:42:54.169308166 +0800
++++ b/drivers/net/wireless/marvell/mwifiex/uap_cmd.c	2023-05-12 10:45:48.167530854 +0800
+@@ -118,6 +118,30 @@ mwifiex_find_wpa_ies(struct mwifiex_priv
+ 	//struct ieee_types_vendor_specific *pvendor_ie;
+ 	//const u8 wpa_oui[4] = { 0x00, 0x50, 0xf2, 0x01 };
+ 
++        int i;
++        struct mwifiex_wep_key wep_key;
++        if (priv->sec_info.wep_enabled) {
++                bss_config->protocol = PROTOCOL_STATIC_WEP;
++                bss_config->key_mgmt = KEY_MGMT_NONE;
++                bss_config->wpa_cfg.length = 0;
++
++                for (i = 0; i < NUM_WEP_KEYS; i++) {
++                        wep_key = priv->wep_key[i];
++                        bss_config->wep_cfg[i].key_index = i;
++
++                        if (priv->wep_key_curr_index == i)
++                                bss_config->wep_cfg[i].is_default = 1;
++                        else
++                                bss_config->wep_cfg[i].is_default = 0;
++
++                        bss_config->wep_cfg[i].length = wep_key.key_length;
++                        memcpy(&bss_config->wep_cfg[i].key,
++                                       &wep_key.key_material,
++                                       wep_key.key_length);
++                }
++            return 0;
++        }
++
+ 	while (bytes_left >= 2) {
+ 		element_id = (IEEEtypes_ElementId_e)(*((u8 *)pcurrent_ptr));
+ 		element_len = *((u8 *)pcurrent_ptr + 1);

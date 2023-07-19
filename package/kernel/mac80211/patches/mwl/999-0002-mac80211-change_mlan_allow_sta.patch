@@ -1,0 +1,39 @@
+--- a/drivers/net/wireless/marvell/mwifiex/main.c
++++ b/drivers/net/wireless/marvell/mwifiex/main.c
+@@ -599,7 +599,7 @@ static int _mwifiex_fw_dpc(const struct
+ 
+ 	rtnl_lock();
+ 	/* Create station interface by default */
+-	wdev = mwifiex_add_virtual_intf(adapter->wiphy, "mlan%d", NET_NAME_ENUM,
++	wdev = mwifiex_add_virtual_intf(adapter->wiphy, "wlan%d", NET_NAME_ENUM,
+ 					NL80211_IFTYPE_STATION, NULL);
+ 	if (IS_ERR(wdev)) {
+ 		mwifiex_dbg(adapter, ERROR,
+--- a/net/wireless/util.c
++++ b/net/wireless/util.c
+@@ -1082,7 +1082,7 @@ int cfg80211_change_iface(struct cfg8021
+ 		dev->priv_flags &= ~IFF_DONT_BRIDGE;
+ 		switch (ntype) {
+ 		case NL80211_IFTYPE_STATION:
+-			if (dev->ieee80211_ptr->use_4addr)
++			//if (dev->ieee80211_ptr->use_4addr)
+ 				break;
+ 			fallthrough;
+ 		case NL80211_IFTYPE_OCB:
+--- a/backport-include/linux/debugfs.h
++++ b/backport-include/linux/debugfs.h
+@@ -74,6 +74,7 @@ debugfs_create_ulong(const char *name, u
+ }
+ #endif
+ 
++#if 0
+ #if LINUX_VERSION_IS_LESS(5,5,0)
+ static inline void debugfs_create_xul(const char *name, umode_t mode,
+ 				      struct dentry *parent,
+@@ -85,5 +86,6 @@ static inline void debugfs_create_xul(co
+ 		debugfs_create_x64(name, mode, parent, (u64 *)value);
+ }
+ #endif
++#endif
+ 
+ #endif /* __BACKPORT_DEBUGFS_H_ */

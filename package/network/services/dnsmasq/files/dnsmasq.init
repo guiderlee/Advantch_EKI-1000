@@ -920,6 +920,9 @@ dnsmasq_start()
 	fi
 
 	config_get leasefile $cfg leasefile "/tmp/dhcp.leases"
+	if [ ! -d "/tmp/resolv.conf.d/" ]; then
+		mkdir /tmp/resolv.conf.d/
+	fi
 	[ -n "$leasefile" ] && [ ! -e "$leasefile" ] && touch "$leasefile"
 	config_get_bool cachelocal "$cfg" cachelocal 1
 

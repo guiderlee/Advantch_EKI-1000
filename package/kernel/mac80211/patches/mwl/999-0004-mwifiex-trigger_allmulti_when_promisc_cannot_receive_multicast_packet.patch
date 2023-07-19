@@ -1,0 +1,24 @@
+--- a/drivers/net/wireless/marvell/mwifiex/sta_ioctl.c
++++ b/drivers/net/wireless/marvell/mwifiex/sta_ioctl.c
+@@ -89,16 +89,20 @@ int mwifiex_request_set_multicast_list(s
+ 				struct mwifiex_multicast_list *mcast_list)
+ {
+ 	int ret = 0;
+-	u16 old_pkt_filter;
++	u32 old_pkt_filter;
+ 
+ 	old_pkt_filter = priv->curr_pkt_filter;
+ 
+ 	if (mcast_list->mode == MWIFIEX_PROMISC_MODE) {
+ 		mwifiex_dbg(priv->adapter, INFO,
+ 			    "info: Enable Promiscuous mode\n");
++#if 0
+ 		priv->curr_pkt_filter |= HostCmd_ACT_MAC_PROMISCUOUS_ENABLE;
+ 		priv->curr_pkt_filter &=
+ 			~HostCmd_ACT_MAC_ALL_MULTICAST_ENABLE;
++#else
++		priv->curr_pkt_filter |= HostCmd_ACT_MAC_PROMISCUOUS_ENABLE | HostCmd_ACT_MAC_ALL_MULTICAST_ENABLE;
++#endif
+ 	} else {
+ 		/* Multicast */
+ 		priv->curr_pkt_filter &= ~HostCmd_ACT_MAC_PROMISCUOUS_ENABLE;

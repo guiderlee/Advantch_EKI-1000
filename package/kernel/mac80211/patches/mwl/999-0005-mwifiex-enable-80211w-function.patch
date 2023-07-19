@@ -1,0 +1,414 @@
+--- a/drivers/net/wireless/marvell/mwifiex/fw.h
++++ b/drivers/net/wireless/marvell/mwifiex/fw.h
+@@ -198,6 +198,7 @@ enum MWIFIEX_802_11_PRIVACY_FILTER {
+ #define TLV_TYPE_ROBUST_COEX        (PROPRIETARY_TLV_BASE_ID + 96)
+ #define TLV_TYPE_UAP_MGMT_FRAME     (PROPRIETARY_TLV_BASE_ID + 104)
+ #define TLV_TYPE_MGMT_IE            (PROPRIETARY_TLV_BASE_ID + 105)
++#define TLV_TYPE_MGMT_IE_PASSTHRU   (PROPRIETARY_TLV_BASE_ID + 112)
+ #define TLV_TYPE_AUTO_DS_PARAM      (PROPRIETARY_TLV_BASE_ID + 113)
+ #define TLV_TYPE_PS_PARAM           (PROPRIETARY_TLV_BASE_ID + 114)
+ #define TLV_TYPE_UAP_PS_AO_TIMER    (PROPRIETARY_TLV_BASE_ID + 123)
+@@ -417,6 +418,13 @@ enum MWIFIEX_802_11_PRIVACY_FILTER {
+ #define HostCmd_CMD_CHAN_REGION_CFG		      0x0242
+ #define HostCmd_CMD_PACKET_AGGR_CTRL		      0x0251
+ 
++#define WL_CIPHER_SUITE_TKIP		0x2
++#define WL_CIPHER_SUITE_AES_CCM 	0x4
++
++#define AKM_SUITE_8021X             0x1
++#define AKM_SUITE_PSK               0x2
++#define AKM_SUITE_PSK_SHA256        0x6
++
+ #define PROTOCOL_NO_SECURITY        0x01
+ #define PROTOCOL_STATIC_WEP         0x02
+ #define PROTOCOL_WPA                0x08
+@@ -426,6 +434,7 @@ enum MWIFIEX_802_11_PRIVACY_FILTER {
+ #define KEY_MGMT_NONE               0x04
+ #define KEY_MGMT_PSK                0x02
+ #define KEY_MGMT_EAP                0x01
++#define KEY_MGMT_PSK_SHA256         0x100
+ #define CIPHER_TKIP                 0x04
+ #define CIPHER_AES_CCMP             0x08
+ #define VALID_CIPHER_BITMAP         0x0c
+@@ -2009,6 +2018,13 @@ struct host_cmd_tlv_dtim_period {
+ 	u8 period;
+ } __packed;
+ 
++#if 0
++struct host_cmd_tlv_mgmt_ie_passthru {
++	struct mwifiex_ie_types_header header;
++	__le32 mgmt_ie_mask;
++} __packed;
++#endif
++
+ struct host_cmd_tlv_frag_threshold {
+ 	struct mwifiex_ie_types_header header;
+ 	__le16 frag_thr;
+--- a/drivers/net/wireless/marvell/mwifiex/main.h
++++ b/drivers/net/wireless/marvell/mwifiex/main.h
+@@ -352,6 +352,117 @@ struct mwifiex_802_11_security {
+ 	u32 encryption_mode;
+ };
+ 
++/** IEEE Type definitions  */
++typedef enum _IEEEtypes_ElementId_e {
++	SSID = 0,
++	SUPPORTED_RATES = 1,
++
++	FH_PARAM_SET = 2,
++	DS_PARAM_SET = 3,
++	CF_PARAM_SET = 4,
++
++	IBSS_PARAM_SET = 6,
++
++	COUNTRY_INFO = 7,
++
++	POWER_CONSTRAINT = 32,
++	POWER_CAPABILITY = 33,
++	TPC_REQUEST = 34,
++	TPC_REPORT = 35,
++	CHANNEL_SWITCH_ANN = 37,
++	EXTEND_CHANNEL_SWITCH_ANN = 60,
++	QUIET = 40,
++	IBSS_DFS = 41,
++	SUPPORTED_CHANNELS = 36,
++	REGULATORY_CLASS = 59,
++	HT_CAPABILITY = 45,
++	QOS_INFO = 46,
++	HT_OPERATION = 61,
++	BSSCO_2040 = 72,
++	OVERLAPBSSSCANPARAM = 74,
++	EXT_CAPABILITY = 127,
++	LINK_ID = 101,
++	/*IEEE802.11r */
++	MOBILITY_DOMAIN = 54,
++	FAST_BSS_TRANSITION = 55,
++	TIMEOUT_INTERVAL = 56,
++	RIC = 57,
++	QOS_MAPPING = 110,
++	VHT_CAPABILITY = 191,
++	VHT_OPERATION = 192,
++	EXT_BSS_LOAD = 193,
++	BW_CHANNEL_SWITCH = 194,
++	VHT_TX_POWER_ENV = 195,
++	EXT_POWER_CONSTR = 196,
++	AID_INFO = 197,
++	QUIET_CHAN = 198,
++	OPER_MODE_NTF = 199,
++
++	ERP_INFO = 42,
++
++	EXTENDED_SUPPORTED_RATES = 50,
++
++	VENDOR_SPECIFIC_221 = 221,
++	WMM_IE = VENDOR_SPECIFIC_221,
++
++	WPS_IE = VENDOR_SPECIFIC_221,
++
++	WPA_IE = VENDOR_SPECIFIC_221,
++	RSN_IE = 48,
++	VS_IE = VENDOR_SPECIFIC_221,
++	WAPI_IE = 68,
++	FRAGMENT = 242,
++	EXTENSION = 255
++} IEEEtypes_ElementId_e;
++
++
++/** wpa_suite_t */
++struct wpa_suite {
++    /** OUI */
++	u8 oui[3];
++    /** tyep */
++	u8 type;
++} __packed;
++
++/** wpa_suite_ucast_t */
++struct wpa_suite_ucast {
++	/* count */
++	u16 count;
++    /** wpa_suite list */
++	struct wpa_suite list[1];
++} __packed;
++
++/** IEEEtypes_Rsn_t */
++struct ieee_types_rsn_header {
++    /** Rsn : Element ID */
++	u8 element_id;
++    /** Rsn : Length */
++	u8 len;
++    /** Rsn : version */
++	u16 version;
++    /** Rsn : group cipher */
++	struct wpa_suite group_cipher;
++    /** Rsn : pairwise cipher */
++	struct wpa_suite_ucast pairwise_cipher;
++} __packed;
++
++/** IEEEtypes_Wpa_t */
++struct ieee_types_wpa_header {
++    /** Wpa : Element ID */
++	u8 element_id;
++    /** Wpa : Length */
++	u8 len;
++    /** Wpa : oui */
++	u8 oui[4];
++    /** version */
++	u16 version;
++    /** Wpa : group cipher */
++	struct wpa_suite group_cipher;
++    /** Wpa : pairwise cipher */
++	struct wpa_suite_ucast pairwise_cipher;
++} __packed;
++
++
+ struct ieee_types_header {
+ 	u8 element_id;
+ 	u8 len;
+--- a/drivers/net/wireless/marvell/mwifiex/uap_cmd.c
++++ b/drivers/net/wireless/marvell/mwifiex/uap_cmd.c
+@@ -21,15 +21,169 @@
+ #include "11ac.h"
+ #include "11n.h"
+ 
++/**
++ * @brief Verify RSN IE
++ *
++ * @param rsn_ie          Pointer IEEEtypes_Rsn_t structure
++ * @param bss_config      Pointer to mwifiex_uap_bss_param structure
++ *
++ * @return                MTRUE/MFALSE
++ */
++static u8
++mwifiex_check_rsn_ie(struct ieee_types_rsn_header *rsn_ie, struct mwifiex_uap_bss_param *bss_config)
++{
++	int left = 0;
++	int count = 0;
++	int i = 0;
++	struct wpa_suite_ucast *key_mgmt = NULL;
++	left = rsn_ie->len + 2;
++	if (left < sizeof(struct ieee_types_rsn_header))
++		return 0;
++	bss_config->wpa_cfg.group_cipher = 0;
++	bss_config->wpa_cfg.pairwise_cipher_wpa2 = 0;
++	bss_config->key_mgmt = 0;
++	/* check the group cipher */
++	switch (rsn_ie->group_cipher.type) {
++	case WL_CIPHER_SUITE_TKIP:
++		bss_config->wpa_cfg.group_cipher = CIPHER_TKIP;
++		break;
++	case WL_CIPHER_SUITE_AES_CCM:
++		bss_config->wpa_cfg.group_cipher = CIPHER_AES_CCMP;
++		break;
++	default:
++		break;
++	}
++	count = le16_to_cpu(rsn_ie->pairwise_cipher.count);
++	
++	for (i = 0; i < count; i++) {
++		switch (rsn_ie->pairwise_cipher.list[i].type) {
++		case WL_CIPHER_SUITE_TKIP:
++			bss_config->wpa_cfg.pairwise_cipher_wpa2 |= CIPHER_TKIP;
++			break;
++		case WL_CIPHER_SUITE_AES_CCM:
++			bss_config->wpa_cfg.pairwise_cipher_wpa2 |= CIPHER_AES_CCMP;
++			break;
++		default:
++			break;
++		}
++	}
++	left -= sizeof(struct ieee_types_rsn_header) + (count - 1) * sizeof(struct wpa_suite);
++	if (left < sizeof(struct wpa_suite_ucast))
++		return 0;
++	key_mgmt =
++		(struct wpa_suite_ucast *)((u8 *)rsn_ie +
++					      sizeof(struct ieee_types_rsn_header) + (count -
++									 1) *
++					      sizeof(struct wpa_suite));
++	count = le16_to_cpu(key_mgmt->count);
++	if (left < (sizeof(struct wpa_suite_ucast) +
++	     (count - 1) * sizeof(struct wpa_suite)))
++		return 0;
++	for (i = 0; i < count; i++) {
++		switch (key_mgmt->list[i].type) {
++		case AKM_SUITE_8021X:
++			bss_config->key_mgmt |= KEY_MGMT_EAP;
++			break;
++		case AKM_SUITE_PSK:
++			bss_config->key_mgmt |= KEY_MGMT_PSK;
++			break;
++		case AKM_SUITE_PSK_SHA256:
++			bss_config->key_mgmt |= KEY_MGMT_PSK_SHA256;
++			break;
++		}
++	}
++	return 1;
++}
++
++/**
++ * @brief Find RSN/WPA IES
++ *
++ * @param ie              Pointer IE buffer
++ * @param bss_config      Pointer to mwifiex_uap_bss_param structure
++ *
++ * @return                MTRUE/MFALSE
++ */
++static u8
++mwifiex_find_wpa_ies(struct mwifiex_private *priv,
++			const u8 *ie, int len, struct mwifiex_uap_bss_param *bss_config)
++{
++	int bytes_left = len;
++	const u8 *pcurrent_ptr = ie;
++	u16 total_ie_len;
++	u8 element_len;
++	u8 wpa2 = 0;
++	u8 wpa = 0;
++	u8 ret = 0;
++	IEEEtypes_ElementId_e element_id;
++	//struct ieee_types_vendor_specific *pvendor_ie;
++	//const u8 wpa_oui[4] = { 0x00, 0x50, 0xf2, 0x01 };
++
++	while (bytes_left >= 2) {
++		element_id = (IEEEtypes_ElementId_e)(*((u8 *)pcurrent_ptr));
++		element_len = *((u8 *)pcurrent_ptr + 1);
++		total_ie_len = element_len + sizeof(struct ieee_types_header );
++		if (bytes_left < total_ie_len) {
++			mwifiex_dbg(priv->adapter, ERROR,
++				    "InterpretIE: Error in processing IE, bytes left < IE length\n");		
++			bytes_left = 0;
++			continue;
++		}
++		switch (element_id) {
++		case RSN_IE:
++			wpa2 = mwifiex_check_rsn_ie((struct ieee_types_rsn_header *)
++						 pcurrent_ptr, bss_config);
++			break;
++#if 0			
++		case VENDOR_SPECIFIC_221:
++			pvendor_ie = (struct ieee_types_vendor_specific *)pcurrent_ptr;
++			if (!memcmp
++			    (pvendor_ie->vend_hdr.oui.oui, wpa_oui,
++			     sizeof(pvendor_ie->vend_hdr.oui.oui)) &&
++			    (pvendor_ie->vend_hdr.oui.oui_type == wpa_oui[3])) {
++				wpa = mwifiex_check_wpa_ie((struct ieee_types_wpa_header *)
++							pcurrent_ptr,
++							bss_config);
++			}
++			break;
++#endif
++		default:
++			break;
++		}
++		pcurrent_ptr += element_len + 2;
++		/* Need to account for IE ID and IE Len */
++		bytes_left -= (element_len + 2);
++	}
++	
++	if (wpa && wpa2) {
++		bss_config->protocol = PROTOCOL_WPA | PROTOCOL_WPA2;
++		ret = 1;
++	} else if (wpa2) {
++		bss_config->protocol = PROTOCOL_WPA2;
++		ret = 1;
++	} else if (wpa) {
++		bss_config->protocol = PROTOCOL_WPA;
++		ret = 1;
++	}
++	return ret;
++}
++
++
+ /* This function parses security related parameters from cfg80211_ap_settings
+  * and sets into FW understandable bss_config structure.
+  */
+ int mwifiex_set_secure_params(struct mwifiex_private *priv,
+ 			      struct mwifiex_uap_bss_param *bss_config,
+ 			      struct cfg80211_ap_settings *params) {
++#if 0
+ 	int i;
+ 	struct mwifiex_wep_key wep_key;
+-
++#endif	
++	const u8 *ie = NULL;
++	int ie_len = 0;
++	
++	ie = ((struct cfg80211_ap_settings *)params)->beacon.tail;
++	ie_len = ((struct cfg80211_ap_settings *)params)->beacon.tail_len;
++	
+ 	if (!params->privacy) {
+ 		bss_config->protocol = PROTOCOL_NO_SECURITY;
+ 		bss_config->key_mgmt = KEY_MGMT_NONE;
+@@ -40,6 +194,8 @@ int mwifiex_set_secure_params(struct mwi
+ 
+ 		return 0;
+ 	}
++	else
++		mwifiex_find_wpa_ies(priv, ie, ie_len, bss_config);
+ 
+ 	switch (params->auth_type) {
+ 	case NL80211_AUTHTYPE_OPEN_SYSTEM:
+@@ -58,6 +214,7 @@ int mwifiex_set_secure_params(struct mwi
+ 
+ 	bss_config->key_mgmt_operation |= KEY_MGMT_ON_HOST;
+ 
++#if 0
+ 	for (i = 0; i < params->crypto.n_akm_suites; i++) {
+ 		switch (params->crypto.akm_suites[i]) {
+ 		case WLAN_AKM_SUITE_8021X:
+@@ -147,6 +304,7 @@ int mwifiex_set_secure_params(struct mwi
+ 	default:
+ 		break;
+ 	}
++#endif	
+ 
+ 	return 0;
+ }
+@@ -495,6 +653,10 @@ mwifiex_uap_bss_param_prepare(u8 *tlv, v
+ 	struct mwifiex_ie_types_htcap *htcap;
+ 	struct mwifiex_ie_types_wmmcap *wmm_cap;
+ 	struct mwifiex_uap_bss_param *bss_cfg = cmd_buf;
++#if 0 
++	struct host_cmd_tlv_mgmt_ie_passthru *mgmt_ie_passthru;
++	u32 mgmt_ie_passthru_mask = 0x2000;
++#endif
+ 	int i;
+ 	u16 cmd_size = *param_size;
+ 
+@@ -650,6 +812,15 @@ mwifiex_uap_bss_param_prepare(u8 *tlv, v
+ 		tlv += sizeof(struct mwifiex_ie_types_htcap);
+ 	}
+ 
++#if 0 
++	mgmt_ie_passthru = (struct host_cmd_tlv_mgmt_ie_passthru *)tlv;
++	mgmt_ie_passthru->header.type = cpu_to_le16(TLV_TYPE_MGMT_IE_PASSTHRU);
++	mgmt_ie_passthru->header.len = cpu_to_le16(sizeof(u32));
++	mgmt_ie_passthru->mgmt_ie_mask = cpu_to_le32(mgmt_ie_passthru_mask);
++	cmd_size += sizeof(struct host_cmd_tlv_mgmt_ie_passthru);
++	tlv += sizeof(struct host_cmd_tlv_mgmt_ie_passthru);
++#endif
++
+ 	if (bss_cfg->wmm_info.qos_info != 0xFF) {
+ 		wmm_cap = (struct mwifiex_ie_types_wmmcap *)tlv;
+ 		wmm_cap->header.type = cpu_to_le16(WLAN_EID_VENDOR_SPECIFIC);
+--- a/drivers/net/wireless/marvell/mwifiex/cfg80211.c
++++ b/drivers/net/wireless/marvell/mwifiex/cfg80211.c
+@@ -508,19 +508,9 @@ mwifiex_cfg80211_set_default_mgmt_key(st
+ 				      struct net_device *netdev,
+ 				      u8 key_index)
+ {
+-	struct mwifiex_private *priv = mwifiex_netdev_get_priv(netdev);
+-	struct mwifiex_ds_encrypt_key encrypt_key;
+-
+ 	wiphy_dbg(wiphy, "set default mgmt key, key index=%d\n", key_index);
+ 
+-	memset(&encrypt_key, 0, sizeof(struct mwifiex_ds_encrypt_key));
+-	encrypt_key.key_len = WLAN_KEY_LEN_CCMP;
+-	encrypt_key.key_index = key_index;
+-	encrypt_key.is_igtk_def_key = true;
+-	eth_broadcast_addr(encrypt_key.mac_addr);
+-
+-	return mwifiex_send_cmd(priv, HostCmd_CMD_802_11_KEY_MATERIAL,
+-				HostCmd_ACT_GEN_SET, true, &encrypt_key, true);
++	return 0;
+ }
+ 
+ /*

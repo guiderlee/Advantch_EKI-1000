@@ -1,0 +1,6 @@
+config cron 'crontab'
+        option enable      '0'
+        option day       '0'
+        option hour          '12'
+        option min        '0'
+

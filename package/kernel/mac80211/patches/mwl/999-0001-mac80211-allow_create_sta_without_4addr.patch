@@ -1,0 +1,12 @@
+--- a/net/wireless/core.c
++++ b/net/wireless/core.c
+@@ -1270,8 +1270,7 @@ void cfg80211_init_wdev(struct wireless_
+ 	/* allow mac80211 to determine the timeout */
+ 	wdev->ps_timeout = -1;
+ 
+-	if ((wdev->iftype == NL80211_IFTYPE_STATION ||
+-	     wdev->iftype == NL80211_IFTYPE_P2P_CLIENT ||
++	if ((wdev->iftype == NL80211_IFTYPE_P2P_CLIENT ||
+ 	     wdev->iftype == NL80211_IFTYPE_ADHOC) && !wdev->use_4addr)
+ 		wdev->netdev->priv_flags |= IFF_DONT_BRIDGE;
+ 

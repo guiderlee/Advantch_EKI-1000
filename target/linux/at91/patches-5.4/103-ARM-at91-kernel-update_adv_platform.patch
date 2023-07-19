@@ -1,0 +1,13 @@
+diff -Naur ori1/arch/arm/boot/dts/Makefile c/arch/arm/boot/dts/Makefile
+--- ori1/arch/arm/boot/dts/Makefile	2021-07-02 23:57:20.909293520 +0800
++++ c/arch/arm/boot/dts/Makefile	2021-06-24 17:00:23.000000000 +0800
+@@ -50,7 +50,8 @@ dtb-$(CONFIG_SOC_AT91SAM9) += \
+ 	at91sam9x25ek.dtb \
+ 	at91sam9x35ek.dtb
+ dtb-$(CONFIG_SOC_SAM9X60) += \
+-	at91-sam9x60ek.dtb
++	at91-sam9x60ek.dtb \
++	eki1000.dtb
+ dtb-$(CONFIG_SOC_SAM_V7) += \
+ 	at91-kizbox2-2.dtb \
+ 	at91-kizbox3-hs.dtb \

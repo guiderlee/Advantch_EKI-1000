@@ -1,0 +1,102 @@
+Index: b/drivers/net/wireless/marvell/mwifiex/11n_rxreorder.c
+===================================================================
+--- a/drivers/net/wireless/marvell/mwifiex/11n_rxreorder.c	2021-06-06 22:16:07.829838300 +0800
++++ b/drivers/net/wireless/marvell/mwifiex/11n_rxreorder.c	2023-03-23 17:06:27.292290973 +0800
+@@ -60,9 +60,9 @@ static int mwifiex_11n_dispatch_amsdu_pk
+ 			}
+ 
+ 			if (priv->bss_role == MWIFIEX_BSS_ROLE_UAP)
+-				ret = mwifiex_uap_recv_packet(priv, rx_skb);
++				ret = mwifiex_uap_recv_packet(priv, rx_skb, local_rx_pd);
+ 			else
+-				ret = mwifiex_recv_packet(priv, rx_skb);
++				ret = mwifiex_recv_packet(priv, rx_skb, local_rx_pd);
+ 			if (ret == -1)
+ 				mwifiex_dbg(priv->adapter, ERROR,
+ 					    "Rx of A-MSDU failed");
+Index: b/drivers/net/wireless/marvell/mwifiex/cfg80211.c
+===================================================================
+--- a/drivers/net/wireless/marvell/mwifiex/cfg80211.c	2023-03-23 17:03:23.559358498 +0800
++++ b/drivers/net/wireless/marvell/mwifiex/cfg80211.c	2023-03-23 17:13:03.810198957 +0800
+@@ -1392,7 +1392,7 @@ mwifiex_dump_station_info(struct mwifiex
+ 		sinfo->tx_packets = node->stats.tx_packets;
+ 		sinfo->tx_failed = node->stats.tx_failed;
+ 
+-		mwifiex_parse_htinfo(priv, priv->tx_rate,
++		mwifiex_parse_htinfo(priv, node->stats.last_tx_rate,
+ 				     node->stats.last_tx_htinfo,
+ 				     &sinfo->txrate);
+ 		sinfo->txrate.legacy = node->stats.last_tx_rate * 5;
+Index: b/drivers/net/wireless/marvell/mwifiex/main.h
+===================================================================
+--- a/drivers/net/wireless/marvell/mwifiex/main.h	2023-03-23 17:03:23.555358739 +0800
++++ b/drivers/net/wireless/marvell/mwifiex/main.h	2023-03-23 17:07:42.451771275 +0800
+@@ -1190,9 +1190,9 @@ void mwifiex_shutdown_drv(struct mwifiex
+ 
+ int mwifiex_dnld_fw(struct mwifiex_adapter *, struct mwifiex_fw_image *);
+ 
+-int mwifiex_recv_packet(struct mwifiex_private *priv, struct sk_buff *skb);
++int mwifiex_recv_packet(struct mwifiex_private *priv, struct sk_buff *skb, struct rxpd *local_rx_pd);
+ int mwifiex_uap_recv_packet(struct mwifiex_private *priv,
+-			    struct sk_buff *skb);
++			    struct sk_buff *skb, struct rxpd *local_rx_pd);
+ 
+ int mwifiex_process_mgmt_packet(struct mwifiex_private *priv,
+ 				struct sk_buff *skb);
+Index: b/drivers/net/wireless/marvell/mwifiex/sta_rx.c
+===================================================================
+--- a/drivers/net/wireless/marvell/mwifiex/sta_rx.c	2021-06-06 22:16:07.825838300 +0800
++++ b/drivers/net/wireless/marvell/mwifiex/sta_rx.c	2023-03-23 17:08:37.316041022 +0800
+@@ -167,7 +167,7 @@ int mwifiex_process_rx_packet(struct mwi
+ 				      local_rx_pd->nf);
+ 	}
+ 
+-	ret = mwifiex_recv_packet(priv, skb);
++	ret = mwifiex_recv_packet(priv, skb, local_rx_pd);
+ 	if (ret == -1)
+ 		mwifiex_dbg(priv->adapter, ERROR,
+ 			    "recv packet failed\n");
+Index: b/drivers/net/wireless/marvell/mwifiex/uap_txrx.c
+===================================================================
+--- a/drivers/net/wireless/marvell/mwifiex/uap_txrx.c	2021-06-06 22:16:07.833838200 +0800
++++ b/drivers/net/wireless/marvell/mwifiex/uap_txrx.c	2023-03-23 17:10:13.581496541 +0800
+@@ -269,7 +269,7 @@ int mwifiex_handle_uap_rx_forward(struct
+ }
+ 
+ int mwifiex_uap_recv_packet(struct mwifiex_private *priv,
+-			    struct sk_buff *skb)
++			    struct sk_buff *skb, struct rxpd *local_rx_pd)
+ {
+ 	struct mwifiex_adapter *adapter = priv->adapter;
+ 	struct mwifiex_sta_node *src_node;
+@@ -286,6 +286,8 @@ int mwifiex_uap_recv_packet(struct mwifi
+ 		src_node->stats.last_rx = jiffies;
+ 		src_node->stats.rx_bytes += skb->len;
+ 		src_node->stats.rx_packets++;
++		src_node->stats.last_tx_rate = local_rx_pd->rx_rate;
++		src_node->stats.last_tx_htinfo = local_rx_pd->ht_info;
+ 	}
+ 
+ 	if (is_multicast_ether_addr(p_ethhdr->h_dest) ||
+Index: b/drivers/net/wireless/marvell/mwifiex/util.c
+===================================================================
+--- a/drivers/net/wireless/marvell/mwifiex/util.c	2021-06-06 22:16:07.829838300 +0800
++++ b/drivers/net/wireless/marvell/mwifiex/util.c	2023-03-23 17:11:22.940855392 +0800
+@@ -441,7 +441,7 @@ mwifiex_process_mgmt_packet(struct mwifi
+  * the function creates a blank SKB, fills it with the data from the
+  * received buffer and then sends this new SKB to the kernel.
+  */
+-int mwifiex_recv_packet(struct mwifiex_private *priv, struct sk_buff *skb)
++int mwifiex_recv_packet(struct mwifiex_private *priv, struct sk_buff *skb, struct rxpd *local_rx_pd)
+ {
+ 	struct mwifiex_sta_node *src_node;
+ 	struct ethhdr *p_ethhdr;
+@@ -459,6 +459,8 @@ int mwifiex_recv_packet(struct mwifiex_p
+ 			src_node->stats.last_rx = jiffies;
+ 			src_node->stats.rx_bytes += skb->len;
+ 			src_node->stats.rx_packets++;
++			src_node->stats.last_tx_rate = local_rx_pd->rx_rate;
++			src_node->stats.last_tx_htinfo = local_rx_pd->ht_info;
+ 		}
+ 	}
+ 

@@ -1,0 +1,199 @@
+Index: ebtables-2018-06-27-48cff25d/extensions/ebt_nat.c
+===================================================================
+--- ebtables-2018-06-27-48cff25d.orig/extensions/ebt_nat.c
++++ ebtables-2018-06-27-48cff25d/extensions/ebt_nat.c
+@@ -21,6 +21,10 @@ static int to_source_supplied, to_dest_s
+ #define NAT_S_TARGET '2'
+ #define NAT_D_TARGET '2'
+ #define NAT_S_ARP '3'
++
++#define NAT_M_AGEING '1'
++#define NAT_M_TARGET '2'
++
+ static const struct option opts_s[] =
+ {
+ 	{ "to-source"     , required_argument, 0, NAT_S },
+@@ -38,6 +42,13 @@ static const struct option opts_d[] =
+ 	{ 0 }
+ };
+ 
++static struct option opts_m[] =
++{
++       { "ageing-time"   , required_argument, 0, NAT_M_AGEING },
++       { "masq-target"   , required_argument, 0, NAT_M_TARGET },
++       { 0 }
++};
++
+ static void print_help_s()
+ {
+ 	printf(
+@@ -55,6 +66,14 @@ static void print_help_d()
+ 	" --dnat-target target   : ACCEPT, DROP, RETURN or CONTINUE\n");
+ }
+ 
++static void print_help_m()
++{
++       printf(
++       "masq options:\n"
++       " --ageing-time seconds : expiration time of IP/MAC hash entry\n"
++       " --masq-target target   : ACCEPT, DROP, RETURN or CONTINUE\n");
++}
++
+ static void init_s(struct ebt_entry_target *target)
+ {
+ 	struct ebt_nat_info *natinfo = (struct ebt_nat_info *)target->data;
+@@ -73,6 +92,15 @@ static void init_d(struct ebt_entry_targ
+ 	return;
+ }
+ 
++static void init_m(struct ebt_entry_target *target)
++{
++       struct ebt_masq_info *masqinfo = (struct ebt_masq_info *)target->data;
++
++       masqinfo->ageing_time = 0;
++       masqinfo->target = EBT_CONTINUE;
++       return;
++}
++
+ #define OPT_SNAT         0x01
+ #define OPT_SNAT_TARGET  0x02
+ #define OPT_SNAT_ARP     0x04
+@@ -137,6 +165,42 @@ static int parse_d(int c, char **argv, i
+ 	return 1;
+ }
+ 
++#define OPT_MASQ_AGEING  0x01
++#define OPT_MASQ_TARGET  0x02
++static int parse_m(int c, char **argv, int argc,
++                       const struct ebt_u_entry *entry, unsigned int *flags,
++                       struct ebt_entry_target **target)
++{
++       struct ebt_masq_info *masqinfo = (struct ebt_masq_info *)(*target)->data;
++       unsigned int num;
++
++       switch (c) {
++       case NAT_M_AGEING:
++               {
++                       char *end;
++                       ebt_check_option2(flags, OPT_MASQ_AGEING);
++                       num = strtol(optarg, &end, 10);
++                        if (num < 0 || num > 10000 || *end !='\0')
++                       ebt_print_error2("bad --ageing-time `%s'", optarg);
++                       masqinfo->ageing_time = num;
++               }
++               break;
++        case NAT_M_TARGET:
++               {
++                       int tmp;
++                       ebt_check_option2(flags, OPT_MASQ_TARGET);
++                       if (FILL_TARGET(optarg, tmp))
++                               ebt_print_error2("Illegal --masq-target target");
++                       masqinfo->target = (masqinfo->target & ~EBT_VERDICT_BITS) | (tmp & EBT_VERDICT_BITS);
++               }
++               break;
++        default:
++                return 0;
++        }
++        return 1;
++}
++
++
+ static void final_check_s(const struct ebt_u_entry *entry,
+    const struct ebt_entry_target *target, const char *name,
+    unsigned int hookmask, unsigned int time)
+@@ -173,6 +237,24 @@ static void final_check_d(const struct e
+ 		ebt_print_error("No dnat address supplied");
+ }
+ 
++static void final_check_m(const struct ebt_u_entry *entry,
++   const struct ebt_entry_target *target, const char *name,
++   unsigned int hookmask, unsigned int time)
++{
++       struct ebt_masq_info *masqinfo = (struct ebt_masq_info *)target->data;
++
++       if (BASE_CHAIN && masqinfo->target == EBT_RETURN) {
++               ebt_print_error("--masq-target RETURN not allowed on base chain");
++               return;
++       }
++       CLEAR_BASE_CHAIN_BIT;
++       if (hookmask & ~((1 << NF_BR_PRE_ROUTING) | (1 << NF_BR_POST_ROUTING))
++            || strcmp(name, "nat")) {
++               ebt_print_error("Wrong chain for masq");
++       }
++}
++
++
+ static void print_s(const struct ebt_u_entry *entry,
+    const struct ebt_entry_target *target)
+ {
+@@ -195,6 +277,15 @@ static void print_d(const struct ebt_u_e
+ 	printf(" --dnat-target %s", TARGET_NAME(natinfo->target));
+ }
+ 
++static void print_m(const struct ebt_u_entry *entry,
++                   const struct ebt_entry_target *target)
++{
++       struct ebt_masq_info *masqinfo = (struct ebt_masq_info *)target->data;
++
++       printf(" --ageing-time %d --masq-target %s", masqinfo->ageing_time,
++       TARGET_NAME(masqinfo->target));
++}
++
+ static int compare(const struct ebt_entry_target *t1,
+    const struct ebt_entry_target *t2)
+ {
+@@ -205,6 +296,15 @@ static int compare(const struct ebt_entr
+ 	   natinfo1->target == natinfo2->target;
+ }
+ 
++static int compare_m(const struct ebt_entry_target *t1,
++   const struct ebt_entry_target *t2)
++{
++       struct ebt_masq_info *masqinfo1 = (struct ebt_masq_info *)t1->data;
++       struct ebt_masq_info *masqinfo2 = (struct ebt_masq_info *)t2->data;
++
++       return masqinfo1->ageing_time == masqinfo2->ageing_time && masqinfo1->target == masqinfo2->target;
++}
++
+ static struct ebt_u_target snat_target =
+ {
+ 	.name		= "snat",
+@@ -231,8 +331,23 @@ static struct ebt_u_target dnat_target =
+ 	.extra_ops	= opts_d,
+ };
+ 
++static struct ebt_u_target masq_target =
++{
++       .name           = "masq",
++       .size           = sizeof(struct ebt_masq_info),
++       .help           = print_help_m,
++       .init           = init_m,
++       .parse          = parse_m,
++       .final_check    = final_check_m,
++       .print          = print_m,
++       .compare        = compare_m,
++       .extra_ops      = opts_m,
++};
++
++
+ __attribute__((constructor)) static void extension_init(void)
+ {
+ 	ebt_register_target(&snat_target);
+ 	ebt_register_target(&dnat_target);
++	ebt_register_target(&masq_target);
+ }
+Index: ebtables-2018-06-27-48cff25d/include/linux/netfilter_bridge/ebt_nat.h
+===================================================================
+--- ebtables-2018-06-27-48cff25d.orig/include/linux/netfilter_bridge/ebt_nat.h
++++ ebtables-2018-06-27-48cff25d/include/linux/netfilter_bridge/ebt_nat.h
+@@ -10,4 +10,10 @@ struct ebt_nat_info {
+ #define EBT_SNAT_TARGET "snat"
+ #define EBT_DNAT_TARGET "dnat"
+ 
++struct ebt_masq_info {
++       int ageing_time; /* masq entry expiration time */
++       int target;      /* EBT_ACCEPT, EBT_DROP, EBT_CONTINUE or EBT_RETURN */
++};
++#define EBT_MASQ_TARGET "masq"
++
+ #endif

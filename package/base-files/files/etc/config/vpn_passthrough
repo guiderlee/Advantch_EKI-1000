@@ -1,0 +1,5 @@
+config main
+        option pptp '1'
+        option l2tp '1'
+        option ipsec '1'
+

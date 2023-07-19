@@ -94,7 +94,7 @@ kill_remaining() { # [ <signal> [ <loop> ] ]
 
 			# Skip kernel threads
 			[ -n "$cmdline" ] || continue
-
+		    
 			echo -n "$name "
 			kill -$sig $pid 2>/dev/null
 

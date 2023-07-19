@@ -184,6 +184,10 @@ LIBGCC_A=$(lastword $(wildcard $(TOOLCHAIN_DIR)/lib/gcc/*/*/libgcc.a))
 LIBGCC_S=$(if $(wildcard $(TOOLCHAIN_DIR)/lib/libgcc_s.so),-L$(TOOLCHAIN_DIR)/lib -lgcc_s,$(LIBGCC_A))
 endif
 
+ifneq ($(wildcard $(TOPDIR)/../.kmodel),)
+TARGET_CFLAGS   += -D__$(shell cat $(TOPDIR)/../.vendor)__ -D__$(shell cat $(TOPDIR)/../.kmodel)__
+endif
+
 ifeq ($(CONFIG_ARCH_64BIT),y)
   LIB_SUFFIX:=64
 endif

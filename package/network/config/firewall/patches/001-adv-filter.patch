@@ -1,0 +1,13 @@
+Index: b/rules.c
+===================================================================
+--- a/rules.c	2019-11-23 01:51:50.000000000 +0800
++++ b/rules.c	2021-08-30 17:28:19.585762428 +0800
+@@ -275,7 +275,7 @@ fw3_load_rules(struct fw3_state *state,
+ 	{
+ 		s = uci_to_section(e);
+ 
+-		if (strcmp(s->type, "rule"))
++		if (strcmp(s->type, "rule") && strcmp(s->type, "adv_rule"))
+ 			continue;
+ 
+ 		if (!(rule = alloc_rule(state)))

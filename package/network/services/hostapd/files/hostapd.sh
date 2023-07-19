@@ -19,7 +19,8 @@ hostapd_append_wep_key() {
 
 	wep_keyidx=0
 	set_default key 1
-	case "$key" in
+	keyidx=$(uci get wireless.wlan0.keyidx)
+	case "$keyidx" in
 		[1234])
 			for idx in 1 2 3 4; do
 				local zidx
@@ -28,10 +29,10 @@ hostapd_append_wep_key() {
 				[ -n "$ckey" ] && \
 					append $var "wep_key${zidx}=$(prepare_key_wep "$ckey")" "$N$T"
 			done
-			wep_keyidx=$((key - 1))
+			wep_keyidx=$((keyidx - 1))
 		;;
 		*)
-			append $var "wep_key0=$(prepare_key_wep "$key")" "$N$T"
+			append $var "wep_key0=$(prepare_key_wep "$keyidx")" "$N$T"
 		;;
 	esac
 }
@@ -115,7 +116,7 @@ hostapd_prepare_device_config() {
 
 	set_default country_ie 1
 	set_default spectrum_mgmt_required 0
-	set_default doth 1
+	set_default doth 0
 	set_default legacy_rates 1
 
 	[ "$hwmode" = "b" ] && legacy_rates=1
@@ -268,7 +269,7 @@ hostapd_set_bss_options() {
 
 	wireless_vif_parse_encryption
 
-	local bss_conf bss_md5sum
+	local bss_conf
 	local wep_rekey wpa_group_rekey wpa_pair_rekey wpa_master_rekey wpa_key_mgmt
 
 	json_get_vars \
@@ -449,8 +450,8 @@ hostapd_set_bss_options() {
 	[ -n "$wps_possible" -a -n "$config_methods" ] && {
 		set_default ext_registrar 0
 		set_default wps_device_type "6-0050F204-1"
-		set_default wps_device_name "OpenWrt AP"
-		set_default wps_manufacturer "www.openwrt.org"
+		set_default wps_device_name "Advantech"
+		set_default wps_manufacturer "www.advantech.com"
 		set_default wps_independent 1
 
 		wps_state=2
@@ -650,9 +651,6 @@ hostapd_set_bss_options() {
 		}
 	}
 
-	bss_md5sum=$(echo $bss_conf | md5sum | cut -d" " -f1)
-	append bss_conf "config_id=$bss_md5sum" "$N"
-
 	append "$var" "$bss_conf" "$N"
 	return 0
 }
@@ -717,7 +715,6 @@ wpa_supplicant_prepare_interface() {
 				fail=1
 			;;
 			sta)
-				[ "$wds" = 1 -o "$multi_ap" = 1 ] || fail=1
 			;;
 		esac
 
@@ -747,7 +744,13 @@ wpa_supplicant_prepare_interface() {
 		[ -e "$multiap_flag_file" ] && rm "$multiap_flag_file"
 	fi
 	wpa_supplicant_teardown_interface "$ifname"
+	scan_freq=$(uci -q get wireless.$ifname.scan_freq)
+	[ -n "$scan_freq" ] && FREQ_LIST="freq_list=$scan_freq"
+	[ -n "$scan_freq" ] && PASSIVE_SCAN="passive_scan=1"
 	cat > "$_config" <<EOF
+ctrl_interface=/var/run/wpa_supplicant
+$FREQ_LIST
+$PASSIVE_SCAN
 $ap_scan
 $country_str
 EOF
@@ -809,7 +812,9 @@ wpa_supplicant_add_network() {
 
 	local scan_ssid="scan_ssid=1"
 	local freq wpa_key_mgmt
+	local active_scan=$(uci -q get wireless.$ifname.active_scan)
 
+	[ "$active_scan" != 1 ] && scan_ssid=""
 	[ "$_w_mode" = "adhoc" ] && {
 		append network_data "mode=1" "$N$T"
 		[ -n "$freq" ] && wpa_supplicant_set_fixed_freq "$freq" "$htmode"
@@ -845,6 +850,7 @@ wpa_supplicant_add_network() {
 			local wep_keyidx=0
 			hostapd_append_wep_key network_data
 			append network_data "wep_tx_keyidx=$wep_keyidx" "$N$T"
+			append network_data "auth_alg=OPEN SHARED" "$N$T"
 		;;
 		wps)
 			key_mgmt='WPS'
@@ -872,6 +878,7 @@ wpa_supplicant_add_network() {
 		eap|eap192|eap-eap192)
 			hostapd_append_wpa_key_mgmt
 			key_mgmt="$wpa_key_mgmt"
+			openssl_cipher="openssl_ciphers=DEFAULT@SECLEVEL=0"
 
 			json_get_vars eap_type identity anonymous_identity ca_cert ca_cert_usesystem
 
@@ -1021,7 +1028,15 @@ wpa_supplicant_add_network() {
 			2)
 				append network_data "proto=RSN" "$N$T"
 			;;
+			3)
+                                append network_data "proto=WPA RSN" "$N$T"
+                        ;;
 		esac
+
+		if [ "$auth_type" = "psk" -o "$auth_type" = "eap" ] ; then
+                        append network_data "pairwise=$wpa_pairwise" "$N$T"
+                        append network_data "group=TKIP CCMP" "$N$T"
+                fi
 
 		case "$ieee80211w" in
 			[012])
@@ -1053,10 +1068,16 @@ wpa_supplicant_add_network() {
 		append network_data "mcast_rate=$mc_rate" "$N$T"
 	}
 
+	board=$(cat /tmp/sysinfo/board_name)
+	if [ "$board" == "EKI-1000" ]; then
+            echo "disable_scan_offload=1" >> "$_config"
+	fi
+
 	if [ "$key_mgnt" = "WPS" ]; then
 		echo "wps_cred_processing=1" >> "$_config"
 	else
 		cat >> "$_config" <<EOF
+$openssl_cipher
 network={
 	$scan_ssid
 	ssid="$ssid"
@@ -1069,29 +1090,33 @@ EOF
 }
 
 wpa_supplicant_run() {
-	local ifname="$1"
-	local hostapd_ctrl="$2"
+	local ifname="$1"; shift
 
 	_wpa_supplicant_common "$ifname"
 
-	ubus wait_for wpa_supplicant.$phy
-	ubus call wpa_supplicant.$phy config_add "{ \
-		\"driver\": \"${_w_driver:-wext}\", \"ctrl\": \"$_rpath\", \
-		\"iface\": \"$ifname\", \"config\": \"$_config\" \
-		${network_bridge:+, \"bridge\": \"$network_bridge\"} \
-		${hostapd_ctrl:+, \"hostapd_ctrl\": \"$hostapd_ctrl\"} \
-		}"
+	/usr/sbin/wpa_supplicant -t -B \
+		${network_bridge:+-b $network_bridge} \
+		-P "/var/run/wpa_supplicant-${ifname}.pid" \
+		-D ${_w_driver:-wext} \
+		-i "$ifname" \
+		-c "$_config" \
+		-C "$_rpath" \
+		-f "/tmp/run/wpa_supplicant-${ifname}.log" \
+		"$@"
 
 	ret="$?"
+	wireless_add_process "$(cat "/var/run/wpa_supplicant-${ifname}.pid")" /usr/sbin/wpa_supplicant 1
+
+	json_get_vars mode wds network
+	[ "$wds" = 1 ] || [ "$network" = "wan" ] || /sbin/wlan-masq
+	clonemac=$(uci -q get wireless.$ifname.clonemac)
+	[ "$clonemac" = 1 ] && /sbin/wlan-clone $ifname
 
 	[ "$ret" != 0 ] && wireless_setup_vif_failed WPA_SUPPLICANT_FAILED
-
-	local supplicant_pid=$(ubus call service list '{"name": "hostapd"}' | jsonfilter -l 1 -e "@['hostapd'].instances['supplicant-${phy}'].pid")
-	wireless_add_process "$supplicant_pid" "/usr/sbin/wpa_supplicant" 1
 
 	return $ret
 }
 
 hostapd_common_cleanup() {
-	killall meshd-nl80211
+	killall hostapd wpa_supplicant meshd-nl80211
 }

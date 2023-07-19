@@ -1,0 +1,53 @@
+#!/bin/sh
+
+CURRENT_DIR=$PWD
+CONFIG_DIR="$CURRENT_DIR/adv_config"
+TARGET_DIR="."
+INDEX=0
+
+config_list() {
+	CONFIGS=$(ls $CONFIG_DIR | sed 's/.config//g')
+	for config in $CONFIGS; do
+		INDEX=$(($INDEX+1))
+		MODEL[$INDEX]=$config
+		echo "[$INDEX]:${MODEL[${INDEX}]}"
+	done
+}
+
+copy_config() {
+	PLATFORM=$(cat $CONFIG_DIR/${MODEL[$1]}/platform)
+	KCONF=$(ls $CONFIG_DIR/${MODEL[$1]}/kernel* | sed 's/^.*kernel_//g')
+
+	echo "Selected Model =" ${MODEL[$1]}
+	echo "Platform =" $PLATFORM
+	echo "kconfig file =" $KCONF
+
+# copy kernel config 
+	cp $CONFIG_DIR/${MODEL[$1]}/kernel_$KCONF $TARGET_DIR/target/linux/$PLATFORM/$KCONF
+
+# copy base-files folder file
+	if [ -d $CONFIG_DIR/${MODEL[$1]}/base-files ]; then
+		cp $CONFIG_DIR/${MODEL[$1]}/base-files $TARGET_DIR/target/linux/$PLATFORM/ -fR
+	fi
+
+# copy lede config
+	cp $CONFIG_DIR/${MODEL[$1]}/openwrt_config $TARGET_DIR/.config
+}
+
+while [ 1 ]; do
+	config_list
+	echo -n "Please Select config [1-$INDEX]: "
+	read selected_index
+
+	#check
+	echo $selected_index | egrep -q '^[0-9]+([0-9]+)?$'
+	if [ $? -ne 0 ] || [ $selected_index -lt 1 ] || [ $selected_index -gt $INDEX ] ; then
+		INDEX=0
+		continue
+	else
+		copy_config $selected_index
+		break
+	fi
+done
+
+echo "Done"

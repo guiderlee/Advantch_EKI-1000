@@ -1,0 +1,67 @@
+Index: b/bridge.c
+===================================================================
+--- a/bridge.c	2017-05-22 23:36:53.000000000 +0800
++++ b/bridge.c	2020-06-11 17:30:10.000000000 +0800
+@@ -38,6 +38,8 @@ enum {
+ 	BRIDGE_ATTR_QUERY_INTERVAL,
+ 	BRIDGE_ATTR_QUERY_RESPONSE_INTERVAL,
+ 	BRIDGE_ATTR_LAST_MEMBER_INTERVAL,
++	BRIDGE_ATTR_GROUP_FWD_ENABLE,
++	BRIDGE_ATTR_GROUP_FWD_MASK,
+ 	__BRIDGE_ATTR_MAX
+ };
+ 
+@@ -57,6 +59,8 @@ static const struct blobmsg_policy bridg
+ 	[BRIDGE_ATTR_QUERY_INTERVAL] = { "query_interval", BLOBMSG_TYPE_INT32 },
+ 	[BRIDGE_ATTR_QUERY_RESPONSE_INTERVAL] = { "query_response_interval", BLOBMSG_TYPE_INT32 },
+ 	[BRIDGE_ATTR_LAST_MEMBER_INTERVAL] = { "last_member_interval", BLOBMSG_TYPE_INT32 },
++	[BRIDGE_ATTR_GROUP_FWD_ENABLE] = { "group_fwd_enable", BLOBMSG_TYPE_BOOL },
++	[BRIDGE_ATTR_GROUP_FWD_MASK] = { "group_fwd_mask", BLOBMSG_TYPE_INT32 },
+ };
+ 
+ static const struct uci_blob_param_info bridge_attr_info[__BRIDGE_ATTR_MAX] = {
+@@ -631,6 +635,14 @@ bridge_apply_settings(struct bridge_stat
+ 
+ 	if ((cur = tb[BRIDGE_ATTR_BRIDGE_EMPTY]))
+ 		cfg->bridge_empty = blobmsg_get_bool(cur);
++
++	if ((cur = tb[BRIDGE_ATTR_GROUP_FWD_ENABLE])) {
++		cfg->group_fwd_enable = blobmsg_get_u32(cur);
++	}
++	
++	if ((cur = tb[BRIDGE_ATTR_GROUP_FWD_MASK])) {
++		cfg->group_fwd_mask = blobmsg_get_u32(cur);
++	}
+ }
+ 
+ enum dev_change_type
+Index: b/system-linux.c
+===================================================================
+--- a/system-linux.c	2017-05-22 23:36:53.000000000 +0800
++++ b/system-linux.c	2020-06-11 17:30:23.000000000 +0800
+@@ -994,6 +994,12 @@ static void system_bridge_conf_multicast
+ 	system_set_dev_sysctl("/sys/devices/virtual/net/%s/bridge/hash_max",
+ 		bridge->ifname, buf);
+ 
++	if (cfg->group_fwd_enable == 1) {
++		snprintf(buf, buf_len, "%i", cfg->group_fwd_mask);
++		system_set_dev_sysctl("/sys/devices/virtual/net/%s/bridge/group_fwd_mask",
++		bridge->ifname, buf);
++	}
++
+ 	if (bridge->settings.flags & DEV_OPT_MULTICAST_ROUTER) {
+ 		snprintf(buf, buf_len, "%i", bridge->settings.multicast_router);
+ 		system_bridge_set_multicast_router(bridge, buf, true);
+Index: b/system.h
+===================================================================
+--- a/system.h	2017-05-22 23:36:53.000000000 +0800
++++ b/system.h	2020-06-11 17:29:55.000000000 +0800
+@@ -104,6 +104,8 @@ struct bridge_config {
+ 	int hello_time;
+ 	int max_age;
+ 	int hash_max;
++	bool group_fwd_enable;
++	int group_fwd_mask;
+ };
+ 
+ enum macvlan_opt {

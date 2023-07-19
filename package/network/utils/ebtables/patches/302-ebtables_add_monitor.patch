@@ -1,0 +1,195 @@
+Index: ebtables-2018-06-27-48cff25d/extensions/ebt_nat.c
+===================================================================
+--- ebtables-2018-06-27-48cff25d.orig/extensions/ebt_nat.c
++++ ebtables-2018-06-27-48cff25d/extensions/ebt_nat.c
+@@ -29,6 +29,9 @@ static int to_source_supplied, to_dest_s
+ #define NAT_C_DSTMAC '2'
+ #define NAT_C_TARGET '3'
+ 
++#define NAT_MO_AGEING '1'
++#define NAT_MO_TARGET '2'
++
+ static const struct option opts_s[] =
+ {
+ 	{ "to-source"     , required_argument, 0, NAT_S },
+@@ -61,6 +64,13 @@ static struct option opts_c[] =
+        { 0 }
+ };
+ 
++static struct option opts_mo[] =
++{
++       { "monitor-time"        , required_argument, 0, NAT_MO_AGEING },
++       { "monitor-target"      , required_argument, 0, NAT_MO_TARGET },
++       { 0 }
++};
++
+ static void print_help_s()
+ {
+ 	printf(
+@@ -95,6 +105,14 @@ static void print_help_c()
+        " --clone-target target         : ACCEPT, DROP, RETURN or CONTINUE\n");
+ }
+ 
++static void print_help_mo()
++{
++       printf(
++       "monitor options:\n"
++       " --ageing-time seconds : expiration time of IP/MAC hash entry\n"
++       " --monitor-target target   : ACCEPT, DROP, RETURN or CONTINUE\n");
++}
++
+ static void init_s(struct ebt_entry_target *target)
+ {
+ 	struct ebt_nat_info *natinfo = (struct ebt_nat_info *)target->data;
+@@ -132,6 +150,15 @@ static void init_c(struct ebt_entry_targ
+        return;
+ }
+ 
++static void init_mo(struct ebt_entry_target *target)
++{
++       struct ebt_monitor_info *monitorinfo = (struct ebt_monitor_info *)target->data;
++
++       monitorinfo->ageing_time = 0;
++       monitorinfo->target = EBT_CONTINUE;
++       return;
++}
++
+ #define OPT_SNAT         0x01
+ #define OPT_SNAT_TARGET  0x02
+ #define OPT_SNAT_ARP     0x04
+@@ -276,6 +303,40 @@ static int parse_c(int c, char **argv, i
+         return 1;
+ }
+ 
++#define OPT_MONITOR_AGEING  0x01
++#define OPT_MONITOR_TARGET  0x02
++static int parse_mo(int c, char **argv, int argc,
++                       const struct ebt_u_entry *entry, unsigned int *flags,
++                       struct ebt_entry_target **target)
++{
++       struct ebt_monitor_info *monitorinfo = (struct ebt_monitor_info *)(*target)->data;
++       unsigned int num;
++
++       switch (c) {
++       case NAT_MO_AGEING:
++               {
++                       char *end;
++                       ebt_check_option2(flags, OPT_MONITOR_AGEING);
++                       num = strtol(optarg, &end, 10);
++                        if (num < 0 || num > 10000 || *end !='\0')
++                       ebt_print_error2("bad --ageing-time `%s'", optarg);
++                       monitorinfo->ageing_time = num;
++               }
++               break;
++        case NAT_MO_TARGET:
++               {
++                       int tmp;
++                       ebt_check_option2(flags, OPT_MONITOR_TARGET);
++                       if (FILL_TARGET(optarg, tmp))
++                               ebt_print_error2("Illegal --monitor-target target");
++                       monitorinfo->target = (monitorinfo->target & ~EBT_VERDICT_BITS) | (tmp & EBT_VERDICT_BITS);
++               }
++               break;
++        default:
++                return 0;
++        }
++        return 1;
++}
+ 
+ static void final_check_s(const struct ebt_u_entry *entry,
+    const struct ebt_entry_target *target, const char *name,
+@@ -347,6 +408,22 @@ static void final_check_c(const struct e
+        }
+ }
+ 
++static void final_check_mo(const struct ebt_u_entry *entry,
++   const struct ebt_entry_target *target, const char *name,
++   unsigned int hookmask, unsigned int time)
++{
++       struct ebt_monitor_info *monitorinfo = (struct ebt_monitor_info *)target->data;
++
++       if (BASE_CHAIN && monitorinfo->target == EBT_RETURN) {
++               ebt_print_error("--monitor-target RETURN not allowed on base chain");
++               return;
++       }
++       CLEAR_BASE_CHAIN_BIT;
++       if (hookmask & ~((1 << NF_BR_PRE_ROUTING) | (1 << NF_BR_POST_ROUTING))
++            || strcmp(name, "nat")) {
++               ebt_print_error("Wrong chain for monitor");
++       }
++}
+ 
+ static void print_s(const struct ebt_u_entry *entry,
+    const struct ebt_entry_target *target)
+@@ -392,6 +469,15 @@ static void print_c(const struct ebt_u_e
+        printf(" --clone-target %s", TARGET_NAME(cloneinfo->target));
+ }
+ 
++static void print_mo(const struct ebt_u_entry *entry,
++                   const struct ebt_entry_target *target)
++{
++       struct ebt_monitor_info *monitorinfo = (struct ebt_monitor_info *)target->data;
++
++       printf(" --ageing-time %d --monitor-target %s", monitorinfo->ageing_time,
++       TARGET_NAME(monitorinfo->target));
++}
++
+ static int compare(const struct ebt_entry_target *t1,
+    const struct ebt_entry_target *t2)
+ {
+@@ -422,6 +508,15 @@ static int compare_c(const struct ebt_en
+                        cloneinfo1->target == cloneinfo2->target;
+ }
+ 
++static int compare_mo(const struct ebt_entry_target *t1,
++   const struct ebt_entry_target *t2)
++{
++       struct ebt_monitor_info *monitorinfo1 = (struct ebt_monitor_info *)t1->data;
++       struct ebt_monitor_info *monitorinfo2 = (struct ebt_monitor_info *)t2->data;
++
++       return monitorinfo1->ageing_time == monitorinfo2->ageing_time && monitorinfo1->target == monitorinfo2->target;
++}
++
+ static struct ebt_u_target snat_target =
+ {
+ 	.name		= "snat",
+@@ -474,10 +569,24 @@ static struct ebt_u_target clone_target
+        .extra_ops      = opts_c,
+ };
+ 
++static struct ebt_u_target monitor_target =
++{
++       .name           = "moni",
++       .size           = sizeof(struct ebt_monitor_info),
++       .help           = print_help_mo,
++       .init           = init_mo,
++       .parse          = parse_mo,
++       .final_check    = final_check_mo,
++       .print          = print_mo,
++       .compare        = compare_mo,
++       .extra_ops      = opts_mo,
++};
++
+ __attribute__((constructor)) static void extension_init(void)
+ {
+ 	ebt_register_target(&snat_target);
+ 	ebt_register_target(&dnat_target);
+ 	ebt_register_target(&masq_target);
+ 	ebt_register_target(&clone_target);
++	ebt_register_target(&monitor_target);
+ }
+Index: ebtables-2018-06-27-48cff25d/include/linux/netfilter_bridge/ebt_nat.h
+===================================================================
+--- ebtables-2018-06-27-48cff25d.orig/include/linux/netfilter_bridge/ebt_nat.h
++++ ebtables-2018-06-27-48cff25d/include/linux/netfilter_bridge/ebt_nat.h
+@@ -23,5 +23,10 @@ struct ebt_clone_info {
+ };
+ #define EBT_CLONE_TARGET "clone"
+ 
++struct ebt_monitor_info {
++       int ageing_time; /* monitor entry expiration time */
++       int target;      /* EBT_ACCEPT, EBT_DROP, EBT_CONTINUE or EBT_RETURN */
++};
++#define EBT_MONITOR_TARGET "monitor"
+ 
+ #endif

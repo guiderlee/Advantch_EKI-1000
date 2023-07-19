@@ -88,6 +88,9 @@ at91_board_detect() {
 	*"Microchip SAMA5D27 WLSOM1 EK")
 		name="sama5d27_wlsom1_ek"
 		;;
+	*"Advantech EKI-1000")
+                name="EKI-1000"
+                ;;
 	esac
 
 	[ -z "$name" ] && name="unknown"

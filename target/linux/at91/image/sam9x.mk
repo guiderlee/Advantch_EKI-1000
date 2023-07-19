@@ -1,3 +1,9 @@
+# EKI series 
+define Build/eki-1000-header
+        cp $@ $(BIN_DIR)/EKI-1000_v$(VERSION_NUMBER).bin
+endef
+#end EKI series
+
 define Device/default-nand
   BLOCKSIZE := 128k
   PAGESIZE := 2048
@@ -65,6 +71,19 @@ define Device/at91-sam9x60ek
   $(Device/evaluation-sdimage)
 endef
 TARGET_DEVICES += at91-sam9x60ek
+
+define Device/eki1000
+  KERNEL_SUFFIX := -fit-uImage.itb
+  DEVICE_TITLE := Advantech EKI-1000
+  SUPPORTED_DEVICES := EKI-1000
+  KERNEL_NAME := vmlinux
+  KERNEL := kernel-bin | lzma | fit lzma $$(DTS_DIR)/eki1000.dtb
+  IMAGES := sysupgrade.bin
+  IMAGE/sysupgrade.bin := append-kernel | append-rootfs | pad-rootfs | append-metadata | eki-1000-header
+endef
+TARGET_DEVICES += eki1000
+
+
 
 ifeq ($(strip $(CONFIG_EXTERNAL_KERNEL_TREE)),"")
   ifeq ($(strip $(CONFIG_KERNEL_GIT_CLONE_URI)),"")

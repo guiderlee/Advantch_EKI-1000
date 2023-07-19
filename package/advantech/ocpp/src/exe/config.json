@@ -1,0 +1,31 @@
+{
+    "development":{
+        "WS_URL": "ws://10.211.55.15:8080/steve/websocket/CentralSystemService/",
+        "chargePointID": "Mchp",
+        "chargePointProfile":
+        {
+            "chargePointVendor": "",
+            "chargePointModel": "",
+            "chargePointSerialNumber": "",
+            "chargeBoxSerialNumber": "",
+            "firmwareVersion": "",
+            "iccid": "",
+            "imsi": "",
+            "meterSerialNumber":"",
+            "meterType": ""
+        },
+        "Authorize":{
+            "idTag": "23F532C38"
+        }
+    },
+    "production":{
+
+    },
+    "testing":{
+        
+    },
+    "Heartbeat":{
+        
+    }
+
+}

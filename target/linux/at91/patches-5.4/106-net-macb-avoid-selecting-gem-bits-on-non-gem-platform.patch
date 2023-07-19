@@ -1,0 +1,29 @@
+Index: b/drivers/net/ethernet/cadence/macb_main.c
+===================================================================
+--- a/drivers/net/ethernet/cadence/macb_main.c	2021-08-05 16:51:06.735715020 +0800
++++ b/drivers/net/ethernet/cadence/macb_main.c	2021-08-05 16:53:51.959728960 +0800
+@@ -533,7 +533,13 @@ static void macb_mac_config(struct phyli
+ 	old_ctrl = ctrl = macb_or_gem_readl(bp, NCFGR);
+ 
+ 	/* Clear all the bits we might set later */
+-	ctrl &= ~(MACB_BIT(SPD) | MACB_BIT(FD) | MACB_BIT(PAE));
++	if (macb_is_gem(bp)) {
++	    ctrl &= ~(GEM_BIT(GBE) | GEM_BIT(SGMIIEN) |
++		  GEM_BIT(PCSSEL));
++
++	    if (state->interface == PHY_INTERFACE_MODE_SGMII)
++		ctrl |= GEM_BIT(SGMIIEN) | GEM_BIT(PCSSEL);
++	}
+ 
+ 	if (bp->caps & MACB_CAPS_MACB_IS_EMAC) {
+ 		if (state->interface == PHY_INTERFACE_MODE_RMII)
+@@ -544,9 +550,6 @@ static void macb_mac_config(struct phyli
+ 		/* We do not support MLO_PAUSE_RX yet */
+ 		if (state->pause & MLO_PAUSE_TX)
+ 			ctrl |= MACB_BIT(PAE);
+-
+-		if (state->interface == PHY_INTERFACE_MODE_SGMII)
+-			ctrl |= GEM_BIT(SGMIIEN) | GEM_BIT(PCSSEL);
+ 	}
+ 
+ 	if (state->speed == SPEED_1000)

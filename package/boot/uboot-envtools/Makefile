@@ -73,6 +73,7 @@ define Package/uboot-envtools/install
 		$(INSTALL_DATA) ./files/$(BOARD) \
 		$(1)/etc/uci-defaults/30_uboot-envtools \
 	)
+	$(INSTALL_DATA) ./files/at91_fw_env.config $(1)/etc/fw_env.config
 endef
 
 $(eval $(call BuildPackage,uboot-envtools))
