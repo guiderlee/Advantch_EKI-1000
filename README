@@ -14,18 +14,24 @@ of a case sensitive file system.
 You need gcc, binutils, bzip2, flex, python, perl, make, find, grep, diff,
 unzip, gawk, getopt, subversion, libz-dev and libc headers installed.
 
-1. If you want build Advantech EKI-1000 platform, please run pre_build script first, 
+1. Run `./scripts/feeds update -a` to obtain all the latest package definitions
+   defined in feeds.conf / feeds.conf.default
+
+2. Run `./scripts/feeds install -a` to install symlinks for all obtained
+   packages into package/feeds/
+
+3. If you want build Advantech EKI-1000 platform, please run pre_build script first, 
 it will copy kernel and openwrt config which the platform need.
 
-2. Run "make menuconfig" to select your preferred configuration for the
+4. Run "make menuconfig" to select your preferred configuration for the
 toolchain, target system & firmware packages.
-   - OCPP is in Advantech software/OCPP
+   - OCPP is in "Advantech software/OCPP"
 
-3. Run "make" to build your firmware. This will download all sources, build
+5. Run "make" to build your firmware. This will download all sources, build
 the cross-compile toolchain and then cross-compile the Linux kernel & all
 chosen applications for your target system.
 
-4. When build firmware success, the image & boot is located bin/target/at91 folder.
+6. When build firmware success, the image & boot is located bin/target/at91 folder.
 
 Sunshine!
 	Your OpenWrt Community
