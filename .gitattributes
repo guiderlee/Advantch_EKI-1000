@@ -1,1 +1,2 @@
 * -text
+glibc-2.27-bef0b1cb31bed76a355776154af9191ed1758222.tar.xz filter=lfs diff=lfs merge=lfs -text
