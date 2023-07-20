@@ -1,0 +1,127 @@
+Index: b/extensions/LUA/xt_LUA_target.c
+===================================================================
+--- a/extensions/LUA/xt_LUA_target.c	2021-11-11 17:39:22.164870911 +0800
++++ b/extensions/LUA/xt_LUA_target.c	2021-11-11 17:41:36.957535056 +0800
+@@ -79,7 +79,8 @@ lua_tg(struct sk_buff *pskb, const struc
+ 
+ 	L = lua_envs[info->state_id]->L;
+ 
+-	if (!skb_make_writable(pskb, pskb->len))
++	//if (!skb_make_writable(pskb, pskb->len))
++	if (skb_ensure_writable(pskb, pskb->len))
+ 		return NF_DROP;
+ 
+ 	/* call the function provided by --function parameter or the default 'process_packet' defined in Lua */
+Index: b/extensions/rtsp/netfilter_helpers.h
+===================================================================
+--- a/extensions/rtsp/netfilter_helpers.h	2021-11-11 17:39:22.112872199 +0800
++++ b/extensions/rtsp/netfilter_helpers.h	2021-11-11 17:43:23.898891315 +0800
+@@ -14,6 +14,8 @@
+ /* Only include these functions for kernel code. */
+ #ifdef __KERNEL__
+ 
++#include <net/netfilter/nf_conntrack_expect.h>
++
+ #include <linux/ctype.h>
+ #define iseol(c) ( (c) == '\r' || (c) == '\n' )
+ 
+@@ -128,6 +130,15 @@ nf_nextline(char* p, uint len, uint* pof
+ }
+ #endif /* NF_NEED_NEXTLINE */
+ 
++static inline int rtsp_nf_ct_expect_related(struct nf_conntrack_expect *expect)
++{
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,3,0)
++   return nf_ct_expect_related(expect, 0);
++#else
++   return nf_ct_expect_related(expect);
++#endif
++}
++
+ #endif /* __KERNEL__ */
+ 
+ #endif /* _NETFILTER_HELPERS_H */
+Index: b/extensions/rtsp/nf_conntrack_rtsp.c
+===================================================================
+--- a/extensions/rtsp/nf_conntrack_rtsp.c	2021-11-11 17:39:22.112872199 +0800
++++ b/extensions/rtsp/nf_conntrack_rtsp.c	2021-11-11 17:44:22.825435448 +0800
+@@ -466,8 +466,8 @@ help_out(struct sk_buff *skb, unsigned c
+ 					  &expinfo, rtp_exp, rtcp_exp);
+ #endif
+ 		else {
+-			if (nf_ct_expect_related(rtp_exp) == 0) {
+-				if (rtcp_exp && nf_ct_expect_related(rtcp_exp) != 0) {
++			if (rtsp_nf_ct_expect_related(rtp_exp) == 0) {
++				if (rtcp_exp && rtsp_nf_ct_expect_related(rtcp_exp) != 0) {
+ 					nf_ct_unexpect_related(rtp_exp);
+ 					pr_info("nf_conntrack_expect_related failed for rtcp\n");
+ 					ret = NF_DROP;
+Index: b/extensions/rtsp/nf_nat_rtsp.c
+===================================================================
+--- a/extensions/rtsp/nf_nat_rtsp.c	2021-11-11 17:39:22.112872199 +0800
++++ b/extensions/rtsp/nf_nat_rtsp.c	2021-11-11 17:45:04.852397458 +0800
+@@ -202,7 +202,7 @@ rtsp_mangle_tran(enum ip_conntrack_info
+ 	case pb_single:
+ 		for (loport = prtspexp->loport; loport != 0; loport++) { /* XXX: improper wrap? */
+ 			rtp_t->dst.u.udp.port = htons(loport);
+-			if (nf_ct_expect_related(rtp_exp) == 0) {
++			if (rtsp_nf_ct_expect_related(rtp_exp) == 0) {
+ 				pr_debug("using port %hu\n", loport);
+ 				break;
+ 			}
+@@ -215,12 +215,12 @@ rtsp_mangle_tran(enum ip_conntrack_info
+ 	case pb_range:
+ 		for (loport = prtspexp->loport; loport != 0; loport += 2) { /* XXX: improper wrap? */
+ 			rtp_t->dst.u.udp.port = htons(loport);
+-			if (nf_ct_expect_related(rtp_exp) != 0) {
++			if (rtsp_nf_ct_expect_related(rtp_exp) != 0) {
+ 				continue;
+ 			}
+ 			hiport = loport + 1;
+ 			rtcp_exp->tuple.dst.u.udp.port = htons(hiport);
+-			if (nf_ct_expect_related(rtcp_exp) != 0) {
++			if (rtsp_nf_ct_expect_related(rtcp_exp) != 0) {
+ 				nf_ct_unexpect_related(rtp_exp);
+ 				continue;
+ 			}
+@@ -243,14 +243,14 @@ rtsp_mangle_tran(enum ip_conntrack_info
+ 	case pb_discon:
+ 		for (loport = prtspexp->loport; loport != 0; loport++) { /* XXX: improper wrap? */
+ 			rtp_t->dst.u.udp.port = htons(loport);
+-			if (nf_ct_expect_related(rtp_exp) == 0) {
++			if (rtsp_nf_ct_expect_related(rtp_exp) == 0) {
+ 				pr_debug("using port %hu (1 of 2)\n", loport);
+ 				break;
+ 			}
+ 		}
+ 		for (hiport = prtspexp->hiport; hiport != 0; hiport++) { /* XXX: improper wrap? */
+ 			rtp_t->dst.u.udp.port = htons(hiport);
+-			if (nf_ct_expect_related(rtp_exp) == 0) {
++			if (rtsp_nf_ct_expect_related(rtp_exp) == 0) {
+ 				pr_debug("using port %hu (2 of 2)\n", hiport);
+ 				break;
+ 			}
+Index: b/extensions/xt_TARPIT.c
+===================================================================
+--- a/extensions/xt_TARPIT.c	2021-11-11 17:39:22.092872694 +0800
++++ b/extensions/xt_TARPIT.c	2021-11-11 17:42:28.644257011 +0800
+@@ -205,7 +205,8 @@ static void tarpit_tcp4(struct net *net,
+ 		return;
+ 
+ 	/* This packet will not be the same as the other: clear nf fields */
+-	nf_reset(nskb);
++	//nf_reset(nskb);
++	nf_reset_ct(nskb);
+ 	skb_nfmark(nskb) = 0;
+ 	skb_init_secmark(nskb);
+ 	skb_shinfo(nskb)->gso_size = 0;
+@@ -346,7 +347,8 @@ static void tarpit_tcp6(struct net *net,
+ 	}
+ 
+ 	/* This packet will not be the same as the other: clear nf fields */
+-	nf_reset(nskb);
++	//nf_reset(nskb);
++	nf_reset_ct(nskb);
+ 	skb_nfmark(nskb) = 0;
+ 	skb_init_secmark(nskb);
+ 	skb_shinfo(nskb)->gso_size = 0;

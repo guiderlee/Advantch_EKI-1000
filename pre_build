@@ -32,6 +32,9 @@ copy_config() {
 
 # copy lede config
 	cp $CONFIG_DIR/${MODEL[$1]}/openwrt_config $TARGET_DIR/.config
+
+# copy 301-fix-kernel5.patch to xtables-addons
+	cp ./dl/301-fix-kernel5.patch ./feeds/packages/net/xtables-addons/patches
 }
 
 while [ 1 ]; do
