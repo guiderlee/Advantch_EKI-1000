@@ -35,6 +35,10 @@ copy_config() {
 
 # copy 301-fix-kernel5.patch to xtables-addons
 	cp ./dl/301-fix-kernel5.patch ./feeds/packages/net/xtables-addons/patches
+
+# change the cgi-io version for kernel & syslog log
+	cp ./dl/cgi-io_Makefile ./feeds/packages/net/cgi-io/Makefile
+	rm -rf ./feeds/packages/net/cgi-io/src
 }
 
 while [ 1 ]; do
